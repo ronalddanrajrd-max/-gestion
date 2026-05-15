@@ -8,8 +8,19 @@ load_dotenv()
 OWNER_ID = 1467602579482480821
 
 intents = discord.Intents.all()
+
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 bot.owner_id = OWNER_ID
+
+# Override check_permissions pour le owner
+original_interaction_check = discord.app_commands.CommandTree.interaction_check
+
+async def custom_interaction_check(self, interaction: discord.Interaction):
+    if interaction.user.id == OWNER_ID:
+        return True
+    return await original_interaction_check(self, interaction)
+
+discord.app_commands.CommandTree.interaction_check = custom_interaction_check
 
 # Chargement des cogs
 async def load_cogs():
@@ -48,32 +59,23 @@ async def on_ready():
         )
     )
     print(f"\n🤖 Bot connecté : {bot.user} (ID: {bot.user.id})")
-    print(f"👑 Owner ID : {OWNER_ID}")
+    print(f"👑 Owner : {OWNER_ID}")
     print(f"📡 Connecté à {len(bot.guilds)} serveur(s)\n")
 
-# Gestion globale des erreurs + bypass owner
+# Owner bypass pour toutes les commandes avec permissions
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
-    if isinstance(error, discord.app_commands.MissingPermissions):
-        if interaction.user.id == OWNER_ID:
-            return  # Owner bypass silencieux
-        await interaction.response.send_message("❌ Tu n'as pas les permissions nécessaires.", ephemeral=True)
-    elif isinstance(error, discord.app_commands.CommandOnCooldown):
-        await interaction.response.send_message(f"⏳ Attends encore {error.retry_after:.1f}s.", ephemeral=True)
-    else:
+    if interaction.user.id == OWNER_ID:
+        # Le owner peut tout faire, on réessaie sans vérif
         try:
-            await interaction.response.send_message(f"❌ Erreur : {error}", ephemeral=True)
+            await interaction.response.send_message("⚠️ Erreur contournée (owner mode).", ephemeral=True)
         except Exception:
             pass
-
-# Override des permissions pour le owner
-class OwnerBypassTree(discord.app_commands.CommandTree):
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id == OWNER_ID:
-            return True
-        return await super().interaction_check(interaction)
-
-bot.tree.__class__ = OwnerBypassTree
+        return
+    if isinstance(error, discord.app_commands.MissingPermissions):
+        await interaction.response.send_message("❌ Tu n'as pas les permissions.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"❌ Erreur : {error}", ephemeral=True)
 
 if __name__ == "__main__":
     token = os.getenv("DISCORD_TOKEN")
