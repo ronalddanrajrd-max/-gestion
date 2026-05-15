@@ -1,191 +1,103 @@
-"""
-cogs/antilink.py
-Supprime automatiquement les liens Discord (invitations) et/ou les URLs
-dans les salons configurés. Les modérateurs sont exemptés.
-"""
-
 import discord
 from discord.ext import commands
 from discord import app_commands
 import re, json, os
+from datetime import timedelta
 
-CONFIG_FILE = "data/antilink.json"
+CONFIG_FILE = "data/config.json"
+LINK_REGEX = re.compile(r"(https?://|discord\.gg/|www\.)\S+", re.IGNORECASE)
 
-INVITE_PATTERN = re.compile(
-    r"(discord\.gg|discord\.com/invite|discordapp\.com/invite)/[a-zA-Z0-9-_]+",
-    re.IGNORECASE
-)
-URL_PATTERN = re.compile(
-    r"https?://[^\s]+",
-    re.IGNORECASE
-)
-
-def load():
+def load_config():
     if not os.path.exists(CONFIG_FILE):
         return {}
     with open(CONFIG_FILE) as f:
         return json.load(f)
 
-def save(data):
+def save_config(data):
     os.makedirs("data", exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-def get_settings(guild_id: int) -> dict:
-    data = load()
-    return data.get(str(guild_id), {
-        "enabled": False,
-        "block_invites": True,
-        "block_links": False,
-        "whitelist_channels": [],
-        "whitelist_roles": [],
-        "warn_user": True,
-        "action": "delete",      # "delete" | "warn" | "kick"
-    })
-
-
 class AntiLink(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
-
-        s = get_settings(message.guild.id)
-        if not s["enabled"]:
+        # Ignorer les admins
+        if message.author.guild_permissions.administrator:
             return
 
-        # Exemptions
-        if message.channel.id in s["whitelist_channels"]:
-            return
-        member = message.author
-        if any(r.id in s["whitelist_roles"] for r in member.roles):
-            return
-        if member.guild_permissions.manage_messages:
+        config = load_config()
+        gid = str(message.guild.id)
+        if not config.get(gid, {}).get("antilink", False):
             return
 
-        content = message.content
-        triggered = False
-        reason = ""
-
-        if s["block_invites"] and INVITE_PATTERN.search(content):
-            triggered = True
-            reason = "Invitation Discord"
-        elif s["block_links"] and URL_PATTERN.search(content):
-            triggered = True
-            reason = "Lien externe"
-
-        if not triggered:
+        # Vérifier si le salon est exempté
+        exempted = config.get(gid, {}).get("antilink_exempt", [])
+        if message.channel.id in exempted:
             return
 
-        # Supprimer le message
-        try:
+        # Vérifier si le rôle est exempté
+        exempted_roles = config.get(gid, {}).get("antilink_exempt_roles", [])
+        if any(r.id in exempted_roles for r in message.author.roles):
+            return
+
+        if LINK_REGEX.search(message.content):
             await message.delete()
-        except discord.Forbidden:
-            pass
+            warn_msg = await message.channel.send(
+                f"🔗 {message.author.mention} les liens ne sont pas autorisés ici !",
+                delete_after=5
+            )
 
-        if s["warn_user"]:
-            try:
-                warn_msg = await message.channel.send(
-                    f"🚫 {member.mention}, les **{reason.lower()}s** ne sont pas autorisés ici.",
-                    delete_after=6
-                )
-            except Exception:
-                pass
-
-        if s["action"] == "warn":
-            pass  # Déjà notifié
-        elif s["action"] == "kick":
-            try:
-                await member.kick(reason=f"Anti-link : {reason}")
-            except Exception:
-                pass
-        elif s["action"] == "timeout":
-            from datetime import timedelta
-            until = discord.utils.utcnow() + timedelta(minutes=10)
-            try:
-                await member.timeout(until, reason=f"Anti-link : {reason}")
-            except Exception:
-                pass
-
-    @commands.Cog.listener()
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        await self.on_message(after)
-
-    # ── COMMANDES ─────────────────────────────────────────────────
-
-    @app_commands.command(name="antilink", description="🔗 Configurer l'anti-lien")
+    # ── ANTILINK ON/OFF ──────────────────────────────────────────
+    @app_commands.command(name="antilink", description="Activer/désactiver l'anti-lien")
+    @app_commands.choices(actif=[
+        app_commands.Choice(name="Activer", value="on"),
+        app_commands.Choice(name="Désactiver", value="off"),
+    ])
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(
-        enabled="Activer/désactiver",
-        block_invites="Bloquer les invitations Discord",
-        block_links="Bloquer tous les liens (http/https)",
-        action="Action : delete / warn / kick / timeout",
-        warn_user="Prévenir l'utilisateur",
-    )
-    async def antilink_cmd(
-        self,
-        interaction: discord.Interaction,
-        enabled: bool = None,
-        block_invites: bool = None,
-        block_links: bool = None,
-        action: str = None,
-        warn_user: bool = None,
-    ):
-        data = load()
+    async def antilink(self, interaction: discord.Interaction, actif: app_commands.Choice[str]):
+        config = load_config()
         gid = str(interaction.guild.id)
-        s = get_settings(interaction.guild.id)
+        if gid not in config:
+            config[gid] = {}
+        config[gid]["antilink"] = actif.value == "on"
+        save_config(config)
+        status = "✅ Activé" if actif.value == "on" else "❌ Désactivé"
+        await interaction.response.send_message(f"🔗 Anti-Link : **{status}**")
 
-        if enabled       is not None: s["enabled"]       = enabled
-        if block_invites is not None: s["block_invites"] = block_invites
-        if block_links   is not None: s["block_links"]   = block_links
-        if warn_user     is not None: s["warn_user"]     = warn_user
-        if action        is not None and action in ("delete","warn","kick","timeout"):
-            s["action"] = action
-
-        data[gid] = s
-        save(data)
-
-        embed = discord.Embed(title="🔗 Anti-Lien — Config", color=discord.Color.blurple())
-        embed.add_field(name="État",              value="✅" if s["enabled"] else "❌",        inline=True)
-        embed.add_field(name="Anti-invites",      value="✅" if s["block_invites"] else "❌",   inline=True)
-        embed.add_field(name="Anti-liens",        value="✅" if s["block_links"] else "❌",     inline=True)
-        embed.add_field(name="Action",            value=f"`{s['action']}`",                    inline=True)
-        embed.add_field(name="Avertir l'user",    value="✅" if s["warn_user"] else "❌",       inline=True)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @app_commands.command(name="antilink-whitelist", description="✅ Exempter un salon ou rôle du filtre")
+    # ── EXEMPTER UN SALON ────────────────────────────────────────
+    @app_commands.command(name="antilink-exempt", description="Exempter un salon de l'anti-lien")
     @app_commands.default_permissions(administrator=True)
-    @app_commands.describe(salon="Salon à exempter", role="Rôle à exempter")
-    async def antilink_whitelist(
-        self,
-        interaction: discord.Interaction,
-        salon: discord.TextChannel = None,
-        role: discord.Role = None,
-    ):
-        data = load()
+    async def antilink_exempt(self, interaction: discord.Interaction, salon: discord.TextChannel):
+        config = load_config()
         gid = str(interaction.guild.id)
-        s = get_settings(interaction.guild.id)
+        if gid not in config:
+            config[gid] = {}
+        if "antilink_exempt" not in config[gid]:
+            config[gid]["antilink_exempt"] = []
+        if salon.id not in config[gid]["antilink_exempt"]:
+            config[gid]["antilink_exempt"].append(salon.id)
+        save_config(config)
+        await interaction.response.send_message(f"✅ {salon.mention} est exempté de l'anti-lien.")
 
-        added = []
-        if salon:
-            if salon.id not in s["whitelist_channels"]:
-                s["whitelist_channels"].append(salon.id)
-                added.append(salon.mention)
-        if role:
-            if role.id not in s["whitelist_roles"]:
-                s["whitelist_roles"].append(role.id)
-                added.append(role.mention)
+    # ── EXEMPTER UN ROLE ─────────────────────────────────────────
+    @app_commands.command(name="antilink-role", description="Exempter un rôle de l'anti-lien")
+    @app_commands.default_permissions(administrator=True)
+    async def antilink_role(self, interaction: discord.Interaction, role: discord.Role):
+        config = load_config()
+        gid = str(interaction.guild.id)
+        if gid not in config:
+            config[gid] = {}
+        if "antilink_exempt_roles" not in config[gid]:
+            config[gid]["antilink_exempt_roles"] = []
+        if role.id not in config[gid]["antilink_exempt_roles"]:
+            config[gid]["antilink_exempt_roles"].append(role.id)
+        save_config(config)
+        await interaction.response.send_message(f"✅ Le rôle **{role.name}** est exempté de l'anti-lien.")
 
-        data[gid] = s
-        save(data)
-        await interaction.response.send_message(
-            f"✅ Ajouté à la whitelist : {', '.join(added) if added else 'Aucun changement.'}",
-            ephemeral=True
-        )
-
-
-async def setup(bot: commands.Bot):
+async def setup(bot):
     await bot.add_cog(AntiLink(bot))

@@ -1,275 +1,171 @@
-"""
-cogs/minigames.py
-Mini-jeux Discord :
-  /trivia     — Question de culture générale (30s)
-  /deviner    — Deviner un nombre entre 1 et 100
-  /scramble   — Reconstituer un mot mélangé
-  /fasttype   — Taper un mot le plus vite possible
-"""
-
 import discord
 from discord.ext import commands
 from discord import app_commands
-import asyncio, random, time
-
-# ── Données ───────────────────────────────────────────────────────
-TRIVIA = [
-    {"q": "Quelle est la capitale de l'Australie ?", "r": "canberra", "hint": "Ce n'est pas Sydney ni Melbourne."},
-    {"q": "Combien de cordes a une guitare classique ?", "r": "6", "hint": "Moins de 10."},
-    {"q": "Quel est l'animal le plus rapide du monde ?", "r": "guépard", "hint": "Un félin."},
-    {"q": "En quelle année a eu lieu la Révolution française ?", "r": "1789", "hint": "Fin du XVIIIe siècle."},
-    {"q": "Quel est le plus grand océan ?", "r": "pacifique", "hint": "Il borde l'Asie et l'Amérique."},
-    {"q": "Combien de planètes compte le Système Solaire ?", "r": "8", "hint": "Pluton n'en fait plus partie."},
-    {"q": "Qui a peint la Joconde ?", "r": "léonard de vinci", "hint": "Un génie de la Renaissance italienne."},
-    {"q": "Quelle est la formule chimique de l'eau ?", "r": "h2o", "hint": "Deux lettres + un chiffre."},
-    {"q": "Quel est le pays le plus grand du monde ?", "r": "russie", "hint": "Il s'étend sur 11 fuseaux horaires."},
-    {"q": "Dans quel sport utilise-t-on un shuttlecock ?", "r": "badminton", "hint": "Se joue avec une raquette."},
-    {"q": "Quelle planète est surnommée la planète rouge ?", "r": "mars", "hint": "4e planète du système solaire."},
-    {"q": "Combien font 7 × 8 ?", "r": "56", "hint": "Entre 50 et 60."},
-    {"q": "Quelle est la monnaie du Japon ?", "r": "yen", "hint": "Symbole ¥."},
-    {"q": "Quel est le plus long fleuve du monde ?", "r": "nil", "hint": "En Afrique."},
-    {"q": "Combien de secondes dans une heure ?", "r": "3600", "hint": "60 × 60."},
-    {"q": "Quel animal est le symbole de l'Australie ?", "r": "kangourou", "hint": "Il a une poche."},
-    {"q": "Quelle est la capitale de l'Espagne ?", "r": "madrid", "hint": "Commence par M."},
-    {"q": "Combien de côtés a un hexagone ?", "r": "6", "hint": "Hexa = 6 en grec."},
-    {"q": "Quel est le métal le plus conducteur ?", "r": "argent", "hint": "Symbole Ag."},
-    {"q": "Qui a écrit 'Les Misérables' ?", "r": "victor hugo", "hint": "Auteur français du XIXe siècle."},
-]
-
-WORDS = [
-    "discord", "serveur", "moderation", "niveau", "musique",
-    "python", "discord", "ticket", "boost", "giveaway",
-    "message", "commande", "salon", "membre", "reaction",
-    "bienvenue", "bannir", "expulser", "avertissement", "leaderboard",
-]
-
-FAST_WORDS = [
-    "programmation", "développeur", "intelligence", "ordinateur",
-    "clavier", "algorithme", "interface", "protocole", "serveur",
-    "javascript", "python", "terminal", "database", "réseau",
-]
-
-# Sessions actives par guild
-_sessions: dict[int, str] = {}  # guild_id -> type de jeu actif
-
+import random, asyncio
 
 class MiniGames(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
+        self.trivia_actif = {}
+        self.wordgame_actif = {}
 
-    # ── TRIVIA ───────────────────────────────────────────────────
-    @app_commands.command(name="trivia", description="🎯 Question de culture générale — 30 secondes pour répondre !")
-    async def trivia(self, interaction: discord.Interaction):
-        gid = interaction.guild.id
-        if _sessions.get(gid):
-            return await interaction.response.send_message(
-                f"❌ Un jeu est déjà en cours dans ce serveur (`{_sessions[gid]}`). Attendez qu'il se termine.",
-                ephemeral=True
-            )
-
-        qa = random.choice(TRIVIA)
-        _sessions[gid] = "trivia"
-
-        embed = discord.Embed(
-            title="🎯 Trivia !",
-            description=f"**{qa['q']}**\n\n⏱ Tu as **30 secondes** pour répondre dans ce salon.",
-            color=discord.Color.blurple()
-        )
-        embed.set_footer(text="Tape ta réponse directement dans le chat !")
-        await interaction.response.send_message(embed=embed)
-
-        # Hint après 15s
-        async def send_hint():
-            await asyncio.sleep(15)
-            if _sessions.get(gid) == "trivia":
-                await interaction.channel.send(f"💡 Indice : *{qa['hint']}*", delete_after=15)
-
-        asyncio.create_task(send_hint())
-
-        def check(m: discord.Message):
-            return (
-                m.channel == interaction.channel
-                and not m.author.bot
-                and m.content.lower().strip() == qa["r"]
-            )
-
-        try:
-            msg = await self.bot.wait_for("message", check=check, timeout=30)
-            embed_win = discord.Embed(
-                title="✅ Bonne réponse !",
-                description=f"🎉 **{msg.author.mention}** a trouvé : **{qa['r']}** !",
-                color=discord.Color.green()
-            )
-            await interaction.channel.send(embed=embed_win)
-        except asyncio.TimeoutError:
-            embed_lose = discord.Embed(
-                title="⏰ Temps écoulé !",
-                description=f"La réponse était : **{qa['r']}**",
-                color=discord.Color.red()
-            )
-            await interaction.channel.send(embed=embed_lose)
-        finally:
-            _sessions.pop(gid, None)
-
-    # ── DEVINER ──────────────────────────────────────────────────
-    @app_commands.command(name="deviner", description="🔢 Devine le nombre entre 1 et 100 !")
+    # ── DEVINER LE NOMBRE ────────────────────────────────────────
+    @app_commands.command(name="deviner", description="Devine un nombre entre 1 et 100 !")
     async def deviner(self, interaction: discord.Interaction):
-        gid = interaction.guild.id
-        if _sessions.get(gid):
-            return await interaction.response.send_message(
-                f"❌ Un jeu est déjà en cours (`{_sessions[gid]}`).", ephemeral=True
-            )
-
-        number = random.randint(1, 100)
-        _sessions[gid] = "deviner"
-        attempts = [0]
-        MAX_ATTEMPTS = 7
-
-        embed = discord.Embed(
-            title="🔢 Devine le nombre !",
-            description=f"J'ai choisi un nombre entre **1 et 100**.\nTu as **{MAX_ATTEMPTS} essais** !",
-            color=discord.Color.blurple()
+        nombre = random.randint(1, 100)
+        tentatives = 7
+        await interaction.response.send_message(
+            f"🎮 J'ai choisi un nombre entre **1 et 100**.\nTu as **{tentatives} tentatives** ! Réponds avec un nombre."
         )
-        await interaction.response.send_message(embed=embed)
 
-        def check(m: discord.Message):
-            return (
-                m.channel == interaction.channel
-                and not m.author.bot
-                and m.content.isdigit()
-            )
+        def check(m):
+            return m.author == interaction.user and m.channel == interaction.channel and m.content.isdigit()
 
-        winner = None
-        while attempts[0] < MAX_ATTEMPTS:
+        for i in range(tentatives):
             try:
-                msg = await self.bot.wait_for("message", check=check, timeout=60)
+                msg = await self.bot.wait_for("message", timeout=30.0, check=check)
+                guess = int(msg.content)
+                restant = tentatives - i - 1
+
+                if guess == nombre:
+                    await interaction.channel.send(f"🎉 **Bravo {interaction.user.mention} !** Tu as trouvé **{nombre}** en {i+1} tentative(s) !")
+                    return
+                elif guess < nombre:
+                    await interaction.channel.send(f"📈 **Plus grand !** ({restant} tentative(s) restante(s))")
+                else:
+                    await interaction.channel.send(f"📉 **Plus petit !** ({restant} tentative(s) restante(s))")
             except asyncio.TimeoutError:
-                await interaction.channel.send("⏰ Temps écoulé ! La partie est terminée.")
-                _sessions.pop(gid, None)
+                await interaction.channel.send(f"⏰ Temps écoulé ! Le nombre était **{nombre}**.")
                 return
 
-            guess = int(msg.content)
-            attempts[0] += 1
-            left = MAX_ATTEMPTS - attempts[0]
+        await interaction.channel.send(f"❌ Tu as épuisé tes tentatives ! Le nombre était **{nombre}**.")
 
-            if guess == number:
-                winner = msg.author
-                break
-            elif guess < number:
-                hint = "📈 **Plus grand !**"
+    # ── TRIVIA ───────────────────────────────────────────────────
+    @app_commands.command(name="trivia", description="Question culture générale !")
+    async def trivia(self, interaction: discord.Interaction):
+        questions = [
+            {"q": "Quelle est la capitale de la France ?", "r": "paris", "choices": ["Paris", "Lyon", "Marseille", "Bordeaux"]},
+            {"q": "Combien font 7 x 8 ?", "r": "56", "choices": ["54", "56", "58", "64"]},
+            {"q": "Quel est le plus grand océan du monde ?", "r": "pacifique", "choices": ["Atlantique", "Indien", "Pacifique", "Arctique"]},
+            {"q": "En quelle année a été créé Discord ?", "r": "2015", "choices": ["2013", "2014", "2015", "2016"]},
+            {"q": "Quelle planète est la plus proche du soleil ?", "r": "mercure", "choices": ["Vénus", "Mercure", "Mars", "Terre"]},
+            {"q": "Combien de côtés a un hexagone ?", "r": "6", "choices": ["5", "6", "7", "8"]},
+            {"q": "Qui a peint la Joconde ?", "r": "leonard de vinci", "choices": ["Picasso", "Michel-Ange", "Léonard de Vinci", "Raphaël"]},
+        ]
+
+        q = random.choice(questions)
+        random.shuffle(q["choices"])
+
+        embed = discord.Embed(
+            title="🧠 Trivia",
+            description=q["q"],
+            color=discord.Color.blue()
+        )
+        for i, c in enumerate(q["choices"]):
+            embed.add_field(name=f"{['🅰️','🅱️','🆎','🆑'][i]}", value=c, inline=True)
+        embed.set_footer(text="Tu as 15 secondes pour répondre !")
+
+        await interaction.response.send_message(embed=embed)
+
+        def check(m):
+            return m.author == interaction.user and m.channel == interaction.channel
+
+        try:
+            msg = await self.bot.wait_for("message", timeout=15.0, check=check)
+            if msg.content.lower() in q["r"].lower() or q["r"].lower() in msg.content.lower():
+                await interaction.channel.send(f"✅ **Bonne réponse {interaction.user.mention} !** C'était bien **{q['choices'][[c.lower() for c in q['choices']].index(q['r']) if q['r'] in [c.lower() for c in q['choices']] else 0]}**.")
             else:
-                hint = "📉 **Plus petit !**"
+                await interaction.channel.send(f"❌ **Mauvaise réponse !** La bonne réponse était **{q['r'].capitalize()}**.")
+        except asyncio.TimeoutError:
+            await interaction.channel.send(f"⏰ Temps écoulé ! La réponse était **{q['r'].capitalize()}**.")
 
-            if left > 0:
-                await msg.reply(f"{hint} (Il te reste **{left}** essai{'s' if left > 1 else ''}.)", delete_after=10)
+    # ── PIERRE FEUILLE CISEAUX MULTIJOUEUR ──────────────────────
+    @app_commands.command(name="duel", description="Défie un autre membre au Pierre Feuille Ciseaux !")
+    async def duel(self, interaction: discord.Interaction, adversaire: discord.Member):
+        if adversaire.bot or adversaire == interaction.user:
+            return await interaction.response.send_message("❌ Choisis un vrai membre !", ephemeral=True)
+
+        await interaction.response.send_message(
+            f"⚔️ **{interaction.user.mention}** défie **{adversaire.mention}** au Pierre Feuille Ciseaux !\n"
+            f"{adversaire.mention} réponds avec `pierre`, `feuille` ou `ciseaux` en 20 secondes !"
+        )
+
+        choix_initiateur = random.choice(["pierre", "feuille", "ciseaux"])
+        await interaction.user.send(f"🎮 Ton choix dans le duel : **{choix_initiateur}** (choix aléatoire pour ce mode)")
+
+        def check(m):
+            return m.author == adversaire and m.channel == interaction.channel and m.content.lower() in ["pierre", "feuille", "ciseaux"]
+
+        try:
+            msg = await self.bot.wait_for("message", timeout=20.0, check=check)
+            choix_adversaire = msg.content.lower()
+            wins = {"pierre": "ciseaux", "feuille": "pierre", "ciseaux": "feuille"}
+            emojis = {"pierre": "🪨", "feuille": "📄", "ciseaux": "✂️"}
+
+            if choix_initiateur == choix_adversaire:
+                result = "🟡 Égalité !"
+                winner = None
+            elif wins[choix_initiateur] == choix_adversaire:
+                result = f"🏆 **{interaction.user.mention}** gagne !"
+                winner = interaction.user
             else:
-                await msg.reply(f"{hint} — Plus d'essais !", delete_after=5)
+                result = f"🏆 **{adversaire.mention}** gagne !"
+                winner = adversaire
 
-        if winner:
-            embed = discord.Embed(
-                title="🎉 Gagné !",
-                description=f"**{winner.mention}** a trouvé **{number}** en **{attempts[0]}** essai{'s' if attempts[0]>1 else ''} !",
-                color=discord.Color.green()
-            )
+            embed = discord.Embed(title="⚔️ Résultat du duel", color=discord.Color.gold())
+            embed.add_field(name=str(interaction.user), value=f"{emojis[choix_initiateur]} {choix_initiateur.capitalize()}")
+            embed.add_field(name=str(adversaire), value=f"{emojis[choix_adversaire]} {choix_adversaire.capitalize()}")
+            embed.add_field(name="Résultat", value=result, inline=False)
+            await interaction.channel.send(embed=embed)
+
+        except asyncio.TimeoutError:
+            await interaction.channel.send(f"⏰ **{adversaire.mention}** n'a pas répondu à temps. **{interaction.user.mention}** gagne par forfait !")
+
+    # ── MOT MYSTERE ──────────────────────────────────────────────
+    @app_commands.command(name="motmystere", description="Devine le mot caché lettre par lettre !")
+    async def motmystere(self, interaction: discord.Interaction):
+        mots = ["discord", "python", "musique", "serveur", "moderation", "giveaway", "booster", "commande"]
+        mot = random.choice(mots)
+        trouve = ["_"] * len(mot)
+        essais = 6
+        lettres_essayees = []
+
+        def afficher():
+            return " ".join(trouve) + f"\n\nEssais restants : {'❤️' * essais}{'🖤' * (6 - essais)}\nLettres essayées : {', '.join(lettres_essayees) or 'aucune'}"
+
+        await interaction.response.send_message(f"🔤 **Mot Mystère** — {len(mot)} lettres\n\n{afficher()}")
+
+        def check(m):
+            return m.author == interaction.user and m.channel == interaction.channel and len(m.content) == 1 and m.content.isalpha()
+
+        while essais > 0 and "_" in trouve:
+            try:
+                msg = await self.bot.wait_for("message", timeout=30.0, check=check)
+                lettre = msg.content.lower()
+
+                if lettre in lettres_essayees:
+                    await interaction.channel.send(f"⚠️ Tu as déjà essayé **{lettre}** !", delete_after=3)
+                    continue
+
+                lettres_essayees.append(lettre)
+
+                if lettre in mot:
+                    for i, c in enumerate(mot):
+                        if c == lettre:
+                            trouve[i] = lettre
+                    await interaction.channel.send(f"✅ Bonne lettre !\n{afficher()}")
+                else:
+                    essais -= 1
+                    await interaction.channel.send(f"❌ La lettre **{lettre}** n'est pas dans le mot.\n{afficher()}")
+
+            except asyncio.TimeoutError:
+                await interaction.channel.send(f"⏰ Temps écoulé ! Le mot était **{mot}**.")
+                return
+
+        if "_" not in trouve:
+            await interaction.channel.send(f"🎉 **Bravo {interaction.user.mention} !** Tu as trouvé le mot **{mot}** !")
         else:
-            embed = discord.Embed(
-                title="💀 Perdu !",
-                description=f"Personne n'a trouvé. La réponse était **{number}**.",
-                color=discord.Color.red()
-            )
-        await interaction.channel.send(embed=embed)
-        _sessions.pop(gid, None)
+            await interaction.channel.send(f"💀 Perdu ! Le mot était **{mot}**.")
 
-    # ── SCRAMBLE ─────────────────────────────────────────────────
-    @app_commands.command(name="scramble", description="🔤 Reconstitue le mot mélangé !")
-    async def scramble(self, interaction: discord.Interaction):
-        gid = interaction.guild.id
-        if _sessions.get(gid):
-            return await interaction.response.send_message(
-                f"❌ Un jeu est déjà en cours (`{_sessions[gid]}`).", ephemeral=True
-            )
-
-        word = random.choice(WORDS)
-        scrambled = list(word)
-        while "".join(scrambled) == word:
-            random.shuffle(scrambled)
-        scrambled_str = " ".join(scrambled).upper()
-        _sessions[gid] = "scramble"
-
-        embed = discord.Embed(
-            title="🔤 Scramble !",
-            description=f"**Mot mélangé :** `{scrambled_str}`\n\n⏱ 20 secondes pour trouver le mot !",
-            color=discord.Color.orange()
-        )
-        embed.add_field(name="💡 Indice", value=f"Longueur : **{len(word)} lettres**")
-        await interaction.response.send_message(embed=embed)
-
-        def check(m: discord.Message):
-            return (
-                m.channel == interaction.channel
-                and not m.author.bot
-                and m.content.lower().strip() == word
-            )
-
-        try:
-            msg = await self.bot.wait_for("message", check=check, timeout=20)
-            embed_win = discord.Embed(
-                title="✅ Bravo !",
-                description=f"🎉 **{msg.author.mention}** a trouvé le mot : **{word}** !",
-                color=discord.Color.green()
-            )
-            await interaction.channel.send(embed=embed_win)
-        except asyncio.TimeoutError:
-            embed_lose = discord.Embed(
-                title="⏰ Temps écoulé !",
-                description=f"Le mot était : **{word}**",
-                color=discord.Color.red()
-            )
-            await interaction.channel.send(embed=embed_lose)
-        finally:
-            _sessions.pop(gid, None)
-
-    # ── FASTTYPE ─────────────────────────────────────────────────
-    @app_commands.command(name="fasttype", description="⌨️ Tape le mot affiché le plus vite possible !")
-    async def fasttype(self, interaction: discord.Interaction):
-        gid = interaction.guild.id
-        if _sessions.get(gid):
-            return await interaction.response.send_message(
-                f"❌ Un jeu est déjà en cours (`{_sessions[gid]}`).", ephemeral=True
-            )
-
-        word = random.choice(FAST_WORDS)
-        _sessions[gid] = "fasttype"
-
-        embed = discord.Embed(
-            title="⌨️ Fast Type !",
-            description=f"**Tape ce mot exactement :**\n```\n{word}\n```\n⏱ Le plus rapide gagne !",
-            color=discord.Color.teal()
-        )
-        await interaction.response.send_message(embed=embed)
-        start = time.time()
-
-        def check(m: discord.Message):
-            return (
-                m.channel == interaction.channel
-                and not m.author.bot
-                and m.content.strip() == word
-            )
-
-        try:
-            msg = await self.bot.wait_for("message", check=check, timeout=30)
-            elapsed = round(time.time() - start, 2)
-            embed_win = discord.Embed(
-                title="⚡ Parfait !",
-                description=f"**{msg.author.mention}** a tapé le mot en **{elapsed}s** !",
-                color=discord.Color.green()
-            )
-            await interaction.channel.send(embed=embed_win)
-        except asyncio.TimeoutError:
-            await interaction.channel.send("⏰ Personne n'a réussi à temps !")
-        finally:
-            _sessions.pop(gid, None)
-
-
-async def setup(bot: commands.Bot):
+async def setup(bot):
     await bot.add_cog(MiniGames(bot))
