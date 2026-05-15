@@ -12,16 +12,16 @@ bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 # Chargement des cogs
 async def load_cogs():
     cogs = [
-        "cogs.moderation",
-        "cogs.roles",
-        "cogs.welcome",
-        "cogs.tickets",
-        "cogs.giveaway",
-        "cogs.fun",
-        "cogs.stats",
-        "cogs.logs",
-        "cogs.music",
-        "cogs.config",
+    "moderation",
+    "roles",
+    "welcome",
+    "tickets",
+    "giveaway",
+    "fun",
+    "stats",
+    "logs",
+    "music",
+    "config",
     ]
     for cog in cogs:
         try:
