@@ -1,18 +1,2 @@
-# nixpacks.toml — Configuration Railway
-# Installe ffmpeg (musique) et libsodium/libopus (voix Discord)
-
 [phases.setup]
-nixPkgs = [
-    "ffmpeg",
-    "libsodium",
-    "libopus",
-    "python312",
-]
-
-[phases.install]
-cmds = [
-    "pip install -r requirements.txt"
-]
-
-[start]
-cmd = "python main.py"
+nixPkgs = ["ffmpeg", "python311"]

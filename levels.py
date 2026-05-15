@@ -24,10 +24,15 @@ def load_config():
     with open(CONFIG_FILE) as f:
         return json.load(f)
 
+def save_config(data):
+    os.makedirs("data", exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(data, f, indent=2)
+
 def xp_needed(level):
     return 100 + (level * 50)
 
-cooldowns = {}  # user_id -> datetime
+cooldowns = {}
 
 class Levels(commands.Cog):
     def __init__(self, bot):
@@ -40,10 +45,9 @@ class Levels(commands.Cog):
 
         uid = str(message.author.id)
         gid = str(message.guild.id)
-
-        # Cooldown 60 secondes
-        now = datetime.utcnow()
         key = f"{gid}-{uid}"
+        now = datetime.utcnow()
+
         if key in cooldowns and (now - cooldowns[key]).seconds < 60:
             return
         cooldowns[key] = now
@@ -72,23 +76,24 @@ class Levels(commands.Cog):
 
             embed = discord.Embed(
                 title="🎉 Level Up !",
-                description=f"Félicitations {message.author.mention} !\nTu es passé au niveau **{new_level}** !",
+                description=f"{message.author.mention} est passé au niveau **{new_level}** !",
                 color=discord.Color.gold()
             )
             embed.set_thumbnail(url=message.author.display_avatar.url)
             await channel.send(embed=embed)
 
-            # Rôle de niveau
             level_roles = config.get(gid, {}).get("level_roles", {})
             role_id = level_roles.get(str(new_level))
             if role_id:
-                role = message.guild.get_role(role_id)
+                role = message.guild.get_role(int(role_id))
                 if role:
-                    await message.author.add_roles(role)
+                    try:
+                        await message.author.add_roles(role)
+                    except Exception:
+                        pass
         else:
             save_levels(levels)
 
-    # ── RANK ─────────────────────────────────────────────────────
     @app_commands.command(name="rank", description="Voir ton niveau et ton XP")
     async def rank(self, interaction: discord.Interaction, membre: discord.Member = None):
         membre = membre or interaction.user
@@ -100,7 +105,6 @@ class Levels(commands.Cog):
         xp = data["xp"]
         needed = xp_needed(level)
 
-        # Classement
         guild_data = levels.get(gid, {})
         sorted_users = sorted(guild_data.items(), key=lambda x: (x[1]["level"], x[1]["xp"]), reverse=True)
         rank = next((i+1 for i, (u, _) in enumerate(sorted_users) if u == uid), "?")
@@ -108,18 +112,14 @@ class Levels(commands.Cog):
         bar_filled = int((xp / needed) * 20)
         bar = "█" * bar_filled + "░" * (20 - bar_filled)
 
-        embed = discord.Embed(
-            title=f"📊 Rang de {membre.display_name}",
-            color=discord.Color.blurple()
-        )
+        embed = discord.Embed(title=f"📊 Rang de {membre.display_name}", color=discord.Color.blurple())
         embed.set_thumbnail(url=membre.display_avatar.url)
         embed.add_field(name="Niveau", value=f"⭐ **{level}**")
         embed.add_field(name="Classement", value=f"🏆 **#{rank}**")
         embed.add_field(name="XP", value=f"`{bar}` {xp}/{needed}", inline=False)
         await interaction.response.send_message(embed=embed)
 
-    # ── LEADERBOARD ──────────────────────────────────────────────
-    @app_commands.command(name="leaderboard", description="Top 10 des membres les plus actifs")
+    @app_commands.command(name="leaderboard", description="Top 10 membres les plus actifs")
     async def leaderboard(self, interaction: discord.Interaction):
         levels = load_levels()
         gid = str(interaction.guild.id)
@@ -134,10 +134,9 @@ class Levels(commands.Cog):
             member = interaction.guild.get_member(int(uid))
             name = member.display_name if member else f"Utilisateur ({uid})"
             desc += f"{medal} **{name}** — Nv. {data['level']} ({data['xp']} XP)\n"
-        embed.description = desc or "Aucune donnée."
+        embed.description = desc or "Aucune donnée encore."
         await interaction.response.send_message(embed=embed)
 
-    # ── SET LEVEL CHANNEL ────────────────────────────────────────
     @app_commands.command(name="setlevelchannel", description="Salon pour les annonces de level up")
     @app_commands.default_permissions(administrator=True)
     async def setlevelchannel(self, interaction: discord.Interaction, salon: discord.TextChannel):
@@ -146,12 +145,10 @@ class Levels(commands.Cog):
         if gid not in config:
             config[gid] = {}
         config[gid]["level_channel"] = salon.id
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(config, f, indent=2)
+        save_config(config)
         await interaction.response.send_message(f"✅ Annonces de niveau dans {salon.mention}")
 
-    # ── SET LEVEL ROLE ───────────────────────────────────────────
-    @app_commands.command(name="levelrole", description="Assigner un rôle à un niveau spécifique")
+    @app_commands.command(name="levelrole", description="Rôle automatique à un niveau donné")
     @app_commands.default_permissions(administrator=True)
     async def levelrole(self, interaction: discord.Interaction, niveau: int, role: discord.Role):
         config = load_config()
@@ -161,11 +158,9 @@ class Levels(commands.Cog):
         if "level_roles" not in config[gid]:
             config[gid]["level_roles"] = {}
         config[gid]["level_roles"][str(niveau)] = role.id
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(config, f, indent=2)
+        save_config(config)
         await interaction.response.send_message(f"✅ Niveau **{niveau}** → Rôle **{role.name}**")
 
-    # ── RESET XP ─────────────────────────────────────────────────
     @app_commands.command(name="resetxp", description="Réinitialiser l'XP d'un membre")
     @app_commands.default_permissions(administrator=True)
     async def resetxp(self, interaction: discord.Interaction, membre: discord.Member):
