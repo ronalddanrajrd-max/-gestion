@@ -13,7 +13,7 @@ YDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
-    'default_search': 'ytsearch',
+    'default_search': 'scsearch',
     'source_address': '0.0.0.0',
 }
 
@@ -48,8 +48,8 @@ class Music(commands.Cog):
         )
         await channel.send(embed=embed)
 
-    @app_commands.command(name="play", description="Jouer une musique depuis YouTube")
-    @app_commands.describe(recherche="Titre ou URL YouTube")
+    @app_commands.command(name="play", description="Jouer une musique")
+    @app_commands.describe(recherche="Titre ou URL")
     async def play(self, interaction: discord.Interaction, recherche: str):
         if not interaction.user.voice or not interaction.user.voice.channel:
             return await interaction.response.send_message("❌ Rejoins un salon vocal d'abord !", ephemeral=True)
@@ -69,9 +69,11 @@ class Music(commands.Cog):
 
         try:
             with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-                if not recherche.startswith("http"):
-                    recherche = f"ytsearch:{recherche}"
-                info = ydl.extract_info(recherche, download=False)
+                if recherche.startswith("http"):
+                    query = recherche
+                else:
+                    query = f"scsearch:{recherche}"
+                info = ydl.extract_info(query, download=False)
                 if "entries" in info:
                     info = info["entries"][0]
                 url = info["url"]
@@ -87,7 +89,7 @@ class Music(commands.Cog):
         else:
             queue.append((url, title))
             await self.play_next(interaction.channel, interaction.guild)
-            await interaction.followup.send(f"✅ Connexion au vocal et lecture lancée !")
+            await interaction.followup.send(f"✅ Lecture lancée !")
 
     @app_commands.command(name="skip", description="Passer la musique en cours")
     async def skip(self, interaction: discord.Interaction):
