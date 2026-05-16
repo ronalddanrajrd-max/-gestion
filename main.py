@@ -20,7 +20,7 @@ async def load_cogs():
         "tickets",
         "giveaway",
         "fun",
-        "stats",
+        "annonce",
         "logs",
         "music",
         "config",
