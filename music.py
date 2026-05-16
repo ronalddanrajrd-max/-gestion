@@ -10,8 +10,8 @@ class Music(commands.Cog):
 
     async def cog_load(self):
         node = wavelink.Node(
-    uri='https://lavalink.voicemaster.xyz',
-    password='voicemaster'
+    uri='http://lavalink.clxud.eu:2333',
+    password='youshallnotpass'
         )
         await wavelink.Pool.connect(nodes=[node], client=self.bot)
 
