@@ -10,7 +10,7 @@ FFMPEG_OPTIONS = {
     'options': '-vn',
 }
 YDL_OPTIONS = {
-    'format': 'bestaudio/best',
+    'format': 'bestaudio[ext=webm]/bestaudio/best',
     'noplaylist': True,
     'quiet': True,
     'default_search': 'ytsearch',
