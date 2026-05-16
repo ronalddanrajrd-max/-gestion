@@ -17,6 +17,11 @@ YDL_OPTIONS = {
     'default_search': 'ytsearch',
     'source_address': '0.0.0.0',
     'cookiefile': os.path.join(os.path.dirname(__file__), 'cookies.txt'),
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['web'],
+        }
+    },
 }
 
 queues = {}
