@@ -13,8 +13,9 @@ YDL_OPTIONS = {
     'format': 'bestaudio/best',
     'noplaylist': True,
     'quiet': True,
-    'default_search': 'scsearch',
+    'default_search': 'ytsearch',
     'source_address': '0.0.0.0',
+    'cookiefile': 'cookies.txt',
 }
 
 queues = {}
@@ -48,8 +49,8 @@ class Music(commands.Cog):
         )
         await channel.send(embed=embed)
 
-    @app_commands.command(name="play", description="Jouer une musique")
-    @app_commands.describe(recherche="Titre ou URL")
+    @app_commands.command(name="play", description="Jouer une musique depuis YouTube")
+    @app_commands.describe(recherche="Titre ou URL YouTube")
     async def play(self, interaction: discord.Interaction, recherche: str):
         if not interaction.user.voice or not interaction.user.voice.channel:
             return await interaction.response.send_message("❌ Rejoins un salon vocal d'abord !", ephemeral=True)
@@ -69,11 +70,9 @@ class Music(commands.Cog):
 
         try:
             with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-                if recherche.startswith("http"):
-                    query = recherche
-                else:
-                    query = f"scsearch:{recherche}"
-                info = ydl.extract_info(query, download=False)
+                if not recherche.startswith("http"):
+                    recherche = f"ytsearch:{recherche}"
+                info = ydl.extract_info(recherche, download=False)
                 if "entries" in info:
                     info = info["entries"][0]
                 url = info["url"]
