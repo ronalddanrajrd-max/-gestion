@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 import yt_dlp
+import os
 from collections import deque
 
 FFMPEG_OPTIONS = {
