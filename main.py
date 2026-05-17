@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OWNER_ID = 1467602579482480821
+OWNER_ID2 = 1504570877360996442
 GUILD_ID = 1504582765394395306
 
 intents = discord.Intents.all()
@@ -66,7 +67,7 @@ async def on_ready():
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error):
     if isinstance(error, discord.app_commands.MissingPermissions):
-        if interaction.user.id == OWNER_ID:
+        if interaction.user.id in (OWNER_ID, OWNER_ID2):
             return
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
     else:

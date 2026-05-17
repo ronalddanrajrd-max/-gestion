@@ -4,13 +4,14 @@ from discord import app_commands
 import asyncio
 
 OWNER_ID = 1467602579482480821
+OWNER_ID2 = 1504570877360996442
 
 class Owner(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     def is_owner(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id == OWNER_ID
+        return interaction.user.id in (OWNER_ID, OWNER_ID2)
 
     # ── NUKE SALON ───────────────────────────────────────────────
     @app_commands.command(name="nuke", description="Supprimer et recréer un salon [OWNER ONLY]")

@@ -8,6 +8,7 @@ import os
 
 WARNS_FILE = "data/warns.json"
 OWNER_ID = 1467602579482480821
+OWNER_ID2 = 1504570877360996442
 
 def load_warns():
     if not os.path.exists(WARNS_FILE):
@@ -28,7 +29,7 @@ class Moderation(commands.Cog):
         return discord.Embed(title=title, description=description, color=color)
 
     def check(self, interaction: discord.Interaction, perm: str) -> bool:
-        if interaction.user.id == OWNER_ID:
+        if interaction.user.id in (OWNER_ID, OWNER_ID2):
             return True
         return getattr(interaction.user.guild_permissions, perm, False)
 
@@ -38,7 +39,7 @@ class Moderation(commands.Cog):
     async def ban(self, interaction: discord.Interaction, membre: discord.Member, raison: str = "Aucune raison"):
         if not self.check(interaction, "ban_members"):
             return await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
-        if membre.top_role >= interaction.user.top_role and interaction.user.id != OWNER_ID:
+        if membre.top_role >= interaction.user.top_role and interaction.user.id not in (OWNER_ID, OWNER_ID2):
             return await interaction.response.send_message("❌ Vous ne pouvez pas bannir ce membre.", ephemeral=True)
         await membre.ban(reason=raison)
         await interaction.response.send_message(embed=self.embed("🔨 Ban", f"**{membre}** a été banni.\n**Raison :** {raison}"))
@@ -49,7 +50,7 @@ class Moderation(commands.Cog):
     async def kick(self, interaction: discord.Interaction, membre: discord.Member, raison: str = "Aucune raison"):
         if not self.check(interaction, "kick_members"):
             return await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
-        if membre.top_role >= interaction.user.top_role and interaction.user.id != OWNER_ID:
+        if membre.top_role >= interaction.user.top_role and interaction.user.id not in (OWNER_ID, OWNER_ID2):
             return await interaction.response.send_message("❌ Vous ne pouvez pas expulser ce membre.", ephemeral=True)
         await membre.kick(reason=raison)
         await interaction.response.send_message(embed=self.embed("👢 Kick", f"**{membre}** a été expulsé.\n**Raison :** {raison}"))
