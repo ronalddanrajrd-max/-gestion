@@ -31,6 +31,7 @@ COGS = [
     "minigames",
     "annonce",
     "owner",
+    "tempvc",
 ]
 
 @bot.event
